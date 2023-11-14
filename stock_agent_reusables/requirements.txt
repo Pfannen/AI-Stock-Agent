@@ -1,6 +1,5 @@
 yahoo_fin
 requests_html
-pandas_ta
 stable-baselines3
 gym-anytrading
 gym

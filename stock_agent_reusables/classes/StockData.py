@@ -1,6 +1,7 @@
 from yahoo_fin.stock_info import get_data
 import pandas as pd
 from typing import List, Tuple, Callable
+from stock_agent_reusables.utils import apply_scaler_to_data, get_scaler_for_data
 
 class StockData():
   """
@@ -65,6 +66,7 @@ class StockData():
                         index_as_date=True,
                         interval=interval)
     self.stock_df = stock_df.drop("ticker", axis=1)
+    self.scaler = None
 
   def add_indicators_to_data(self, indicators: List[Callable[[pd.DataFrame], Tuple[List, str]]]) -> pd.DataFrame:
     """
@@ -86,3 +88,33 @@ class StockData():
         df_copy[col_name] = col_data
     df_copy.dropna(inplace=True)
     return df_copy
+
+  def scale_data(self, data: pd.DataFrame, columns_to_scale: List[str], inverse: bool) -> pd.DataFrame:
+    data_copy = data.copy()
+    if self.scaler == None:
+      self.scaler = get_scaler_for_data(data_copy['close'][:])
+    
+    for column in columns_to_scale:
+      data_copy[column] = apply_scaler_to_data(data[column], self.scaler, inverse)
+    
+    return data_copy
+    
+  def get_classification_labels(self, hold_threshold_percentage=0) -> List[int]:
+    labels = [0]
+    closes = self.stock_df['close']
+    for i in range(1, len(closes)):
+      percent_change = closes[i] / closes[i-1]
+      if percent_change > 1:
+        percent_change -= 1
+        if percent_change < hold_threshold_percentage:
+          labels.append(2)
+        else:
+          labels.append(1)
+      else:
+        percent_change = 1 - percent_change
+        if percent_change < hold_threshold_percentage:
+          labels.append(2)
+        else:
+          labels.append(0)
+    return labels
+        
