@@ -33,7 +33,7 @@ class StockDataset(Dataset):
 
   def __getitem__(self, index):
     input = torch.tensor(self.data[index], dtype=torch.float32)
-    label = torch.tensor(self.labels[index], dtype=torch.float32)
+    label = torch.tensor(self.labels[index], dtype=torch.long)
     return input, label
 
 def get_data_loaders(data, labels, train_split_percentage=0.8, batch_size=32):
@@ -249,3 +249,35 @@ def train(model: torch.nn.Module,
 
   # Return the filled results at the end of the epochs
   return results
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+
+def plot_model_predictions(stock_prices: List[float], signals: List[int]):
+  # Map signals to colors and labels
+  color_mapping = {0: 'green', 1: 'red', 2: 'orange'}
+
+  # Plot stock prices with connecting lines
+  plt.plot(stock_prices, label='Stock Prices', linestyle='-', color='grey')
+
+  # Plot signals with corresponding colors
+  for i, signal in enumerate(signals):
+      plt.scatter(i, stock_prices[i], color=color_mapping[signal])
+
+  # Create a custom legend with specific markers
+  legend_handles = [
+      mpatches.Circle((0, 0), 0.1, color='green', label='Buy'),
+      mpatches.Circle((0, 0), 0.1, color='red', label='Sell'),
+      mpatches.Circle((0, 0), 0.1, color='orange', label='Hold')
+  ]
+
+  # Add legend with custom handles
+  plt.legend(handles=legend_handles)
+
+  # Add labels and title
+  plt.xlabel('Time')
+  plt.ylabel('Stock Price')
+  plt.title('Stock Prices with Buy/Sell/Hold Signals')
+
+  # Show the plot
+  plt.show()
