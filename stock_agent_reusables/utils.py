@@ -281,3 +281,9 @@ def plot_model_predictions(stock_prices: List[float], signals: List[int]):
 
   # Show the plot
   plt.show()
+
+def test_and_plot_model_preds(model: torch.nn, close_prices: List[float], model_pred_data, device: str):
+  model.eval()
+  with torch.inference_mode():
+    preds = model(torch.tensor(model_pred_data, dtype=torch.float32).to(device)).argmax(dim=1).tolist()
+    plot_model_predictions(stock_prices=close_prices, signals=preds)

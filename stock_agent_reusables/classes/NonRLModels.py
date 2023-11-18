@@ -39,8 +39,8 @@ class LSTMModel(nn.Module):
 
   def forward(self, X):
     batch_size = len(X)
-    h0 = torch.zeros(self.stacked_layer_count, batch_size, self.hidden_units)
-    c0 = torch.zeros(self.stacked_layer_count, batch_size, self.hidden_units)
+    h0 = torch.zeros(self.stacked_layer_count, batch_size, self.hidden_units).to(self.device)
+    c0 = torch.zeros(self.stacked_layer_count, batch_size, self.hidden_units).to(self.device)
     out, _ = self.lstm(X, (h0, c0))
     out = self.fc(out[:, -1, :])
     return out

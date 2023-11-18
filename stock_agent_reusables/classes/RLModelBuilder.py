@@ -1,3 +1,4 @@
+import os
 from matplotlib import pyplot as plt
 import pandas as pd
 import gymnasium as gym
@@ -85,6 +86,12 @@ class ModelBuilder():
                                         best_model_save_path=model_save_path,
                                         verbose=1)
         self.model = A2C('MlpPolicy', self.env, verbose=1)
+    
+    def load_model(self, model_path):
+        if os.path.exists(model_path):
+          self.model = A2C.load(model_path)
+        else:
+           print("File path {} does not exist.".format(model_path))
 
     def train_model(self, timesteps):
         """
