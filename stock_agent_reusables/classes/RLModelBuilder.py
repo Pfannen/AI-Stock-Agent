@@ -7,6 +7,7 @@ from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
 from stable_baselines3 import A2C
 from gym_anytrading.envs import StocksEnv
+import quantstats as qs
 
 def signals(env):
   start = env.frame_bound[0] - env.window_size
@@ -68,24 +69,15 @@ class ModelBuilder():
     def __init__(self, 
                df: pd.DataFrame, 
                window_size: int, 
-               train_percentage: float, 
-               eval_callback_freq: int, 
-               model_save_path: str):
-        self.df = df
+               train_percentage: float,
+               verbosity = 1):
+        self.df = df.copy()
         self.window_size = window_size
         self.train_end = int(train_percentage * len(df))
-        self.model_save_path = model_save_path
         env = CustomEnv(df=df, window_size=window_size, frame_bound=(window_size, self.train_end))
         env_lambda = lambda: env
         self.env = DummyVecEnv([env_lambda])
-
-        self.stop_callback = StopTrainingOnRewardThreshold(reward_threshold=200, verbose=1)
-        self.eval_callback = EvalCallback(self.env,
-                                        callback_on_new_best=self.stop_callback,
-                                        eval_freq=eval_callback_freq,
-                                        best_model_save_path=model_save_path,
-                                        verbose=1)
-        self.model = A2C('MlpPolicy', self.env, verbose=1)
+        self.model = A2C('MlpPolicy', self.env, verbose=verbosity)
     
     def load_model(self, model_path):
         if os.path.exists(model_path):
@@ -93,17 +85,17 @@ class ModelBuilder():
         else:
            print("File path {} does not exist.".format(model_path))
 
-    def train_model(self, timesteps):
+    def train_model(self, timesteps, callback=None):
         """
             Trains the A2C model for a specified number of timesteps.
 
             Parameters:
             - timesteps (int): The total number of training timesteps.
         """
-        self.model.learn(total_timesteps=timesteps, callback=self.eval_callback)
-        self.model = A2C.load(self.model_save_path + '/best_model')
+        self.model.learn(total_timesteps=timesteps, callback=callback)
+        # self.model = A2C.load(self.model_save_path + '/best_model')
 
-    def test_model(self, frame_bound=None):
+    def get_model_report(self, frame_bound=None, plot_preds=True, stats=True):
         """
             Tests the trained A2C model on the specified test data.
 
@@ -111,8 +103,12 @@ class ModelBuilder():
             - frame_bound (Tuple[int, int]): The start and end indices of the test data. If not provided,
           the default is set to the reserved test data.
         """
-        if frame_bound == None:
-            frame_bound = (self.train_end, len(self.df))
+        if frame_bound == None or frame_bound[0] > frame_bound[1]:
+          frame_bound = (self.train_end, len(self.df))
+        else:
+          beg, end = frame_bound[0], frame_bound[1]
+          df_len = len(self.df)
+          frame_bound = (int(df_len * beg), int(df_len * end))
         test_env = CustomEnv(df=self.df, window_size=self.window_size, frame_bound=frame_bound)
         obs = test_env.reset()[0]
 
@@ -123,8 +119,16 @@ class ModelBuilder():
             if done:
                 print("info", info)
                 break
+        if plot_preds:
+          plt.figure(figsize=(15,6), facecolor='w')
+          plt.cla()
+          test_env.render_all()
+          plt.show()
+        
+        if stats:
+          profits = pd.Series(test_env.history['total_profit'], index=self.df.index[frame_bound[0]+1:])
+          returns = profits.pct_change().iloc[1:]
+          qs.reports.full(returns)
 
-        plt.figure(figsize=(15,6), facecolor='w')
-        plt.cla()
-        test_env.render_all()
-        plt.show()
+        return test_env
+      

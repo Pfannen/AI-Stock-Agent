@@ -3,3 +3,4 @@ requests_html
 stable-baselines3
 gym-anytrading
 gym
+quantstats
