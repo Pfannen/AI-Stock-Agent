@@ -1,6 +1,7 @@
 yahoo_fin
 requests_html
 stable-baselines3
+sb3-contrib
 gym-anytrading
 gym
 quantstats

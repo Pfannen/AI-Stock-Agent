@@ -6,8 +6,10 @@ import gym_anytrading
 from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import EvalCallback, StopTrainingOnRewardThreshold
 from stable_baselines3 import A2C
+from sb3_contrib import RecurrentPPO
 from gym_anytrading.envs import StocksEnv
 import quantstats as qs
+import numpy as np
 
 def signals(env):
   start = env.frame_bound[0] - env.window_size
@@ -18,6 +20,16 @@ def signals(env):
 
 class CustomEnv(StocksEnv):
   _process_data = signals
+
+model_types = {
+   'A2C': lambda model, env, verbose: A2C(model, env, verbose=verbose),
+   'RecPPO': lambda model, env, verbose: RecurrentPPO(model, env, verbose=verbose)
+}
+
+model_load = {
+   'A2C': lambda path: A2C.load(path),
+   'RecPPO': lambda path: RecurrentPPO.load(path)
+}
 
 class ModelBuilder():
     """
@@ -67,21 +79,28 @@ class ModelBuilder():
         ```
     """
     def __init__(self, 
-               df: pd.DataFrame, 
-               window_size: int, 
-               train_percentage: float,
-               verbosity = 1):
+                df: pd.DataFrame, 
+                window_size: int, 
+                train_percentage: float,
+                model_type: str,
+                policy_model: str,
+                verbosity = 1):
         self.df = df.copy()
         self.window_size = window_size
         self.train_end = int(train_percentage * len(df))
         env = CustomEnv(df=df, window_size=window_size, frame_bound=(window_size, self.train_end))
         env_lambda = lambda: env
         self.env = DummyVecEnv([env_lambda])
-        self.model = A2C('MlpPolicy', self.env, verbose=verbosity)
+        self.model_type = model_type
+        self.policy_model = policy_model
+        if model_type in model_types:
+          self.model = model_types[model_type](policy_model, self.env, verbosity)
+        else:
+           self.model = model_types['RecPPO']('MlpLstmPolicy', self.env, verbosity)
     
     def load_model(self, model_path):
         if os.path.exists(model_path):
-          self.model = A2C.load(model_path)
+          self.model = model_load[self.model_type](model_path)
         else:
            print("File path {} does not exist.".format(model_path))
 
@@ -93,7 +112,6 @@ class ModelBuilder():
             - timesteps (int): The total number of training timesteps.
         """
         self.model.learn(total_timesteps=timesteps, callback=callback)
-        # self.model = A2C.load(self.model_save_path + '/best_model')
 
     def get_model_report(self, frame_bound=None, plot_preds=True, stats=True):
         """
@@ -111,24 +129,32 @@ class ModelBuilder():
           frame_bound = (int(df_len * beg), int(df_len * end))
         test_env = CustomEnv(df=self.df, window_size=self.window_size, frame_bound=frame_bound)
         obs = test_env.reset()[0]
+        states = None
+        episode_starts = np.ones((1,), dtype=bool)
 
         while True:
-            action, _states = self.model.predict(obs)
+            action, states = self.model.predict(obs, state=states, episode_start=episode_starts, deterministic=True)
             obs, rewards, terminated, truncated, info = test_env.step(action)
             done = terminated or truncated
             if done:
                 print("info", info)
                 break
         if plot_preds:
-          plt.figure(figsize=(15,6), facecolor='w')
-          plt.cla()
-          test_env.render_all()
-          plt.show()
+          self.plot_preds(test_env)
         
         if stats:
-          profits = pd.Series(test_env.history['total_profit'], index=self.df.index[frame_bound[0]+1:])
-          returns = profits.pct_change().iloc[1:]
-          qs.reports.full(returns)
+          self.get_quant_stats(test_env, frame_bound)
 
         return test_env
+
+    def plot_preds(self, test_env):
+      plt.figure(figsize=(15,6), facecolor='w')
+      plt.cla()
+      test_env.render_all()
+      plt.show() 
+
+    def get_quant_stats(self, test_env, frame_bound):
+      profits = pd.Series(test_env.history['total_profit'], index=self.df.index[frame_bound[0]+1:])
+      returns = profits.pct_change().iloc[1:]
+      qs.reports.full(returns)
       
